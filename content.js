@@ -12,14 +12,20 @@
   const USER_NAME_SELECTOR = '.yamb-message-user__name';
   const USER_SELECTOR = '.yamb-message-user';
 
+  // ----- Безопасное приведение к строке -----
+  function safeStr(value) {
+    if (value === null || value === undefined) return '';
+    return String(value);
+  }
+
   // ----- Нормализация текста: только русские буквы, нижний регистр -----
   function normalizeText(text) {
-    return String(text || '').replace(/[^а-яё]/gi, '').toLowerCase();
+    return safeStr(text).replace(/[^а-яё]/gi, '').toLowerCase();
   }
 
   // ----- Извлечение номера -----
   function extractNumber(text) {
-    const m = String(text || '').match(/(ХК-\d{6}|ЗНО-\d{6})/i);
+    const m = safeStr(text).match(/(ХК-\d{6}|ЗНО-\d{6})/i);
     return m ? m[0].toUpperCase() : null;
   }
 
@@ -252,8 +258,8 @@
         th { background: #fafafa; font-weight: 500; position: sticky; top: 0; }
         .hk { font-weight: 700; white-space: nowrap; }
         .overdue { color: #e53935; }
-        .slow-row { background-color: #fff3e0; }  /* лёгкий оранжевый для >8 часов */
-        .close-text, .order-text { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: help; }
+        .slow-row { background-color: #fff3e0; }
+        .close-text { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: help; }
         .month-nav { display: flex; align-items: center; gap: 8px; user-select: none; }
         .month-nav span { min-width: 100px; text-align: center; font-weight: 500; }
       </style>
@@ -331,8 +337,7 @@
   }
 
   function escapeCSV(text) {
-    if (text === null || text === undefined) return '';
-    const str = String(text);
+    const str = safeStr(text);
     return '"' + str.replace(/"/g, '""') + '"';
   }
 
@@ -344,19 +349,31 @@
       );
       console.log('[Export] Найдено заявок:', filtered.length);
       filtered.sort((a, b) => a.rootDate - b.rootDate);
-      const header = ['Номер', 'ИНЦ/ЗНО', 'Объект', 'Дата заявки', 'Дата закрытия', 'Скорость (часы)', 'Скорость (мин)', 'Текст закрытия', 'Автор', 'Текст заявки'];
-      const rows = filtered.map(o => [
-        o.number,
-        o.inc,
-        o.object,
-        formatDateTime(o.rootDate),
-        o.closeDate ? formatDateTime(o.closeDate) : '',
-        calcSpeedHours(o) || '',
-        calcSpeedMinutes(o) || '',
-        o.closeText,
-        o.closeAuthor,
-        o.text
-      ].map(escapeCSV).join(','));
+
+      const header = ['Номер', 'ИНЦ/ЗНО', 'Объект', 'Дата заявки', 'Дата закрытия', 'Скорость (часы)', 'Скорость (мин)', 'Текст закрытия', 'Автор'];
+
+      const rows = filtered.map((o, idx) => {
+        try {
+          const row = [
+            o.number,
+            o.inc,
+            o.object,
+            formatDateTime(o.rootDate),
+            o.closeDate ? formatDateTime(o.closeDate) : '',
+            calcSpeedHours(o) || '',
+            calcSpeedMinutes(o) || '',
+            o.closeText,
+            o.closeAuthor
+          ];
+          // Логируем типы для диагностики
+          console.log(`[Export] Row ${idx} types:`, row.map(v => typeof v));
+          return row.map(escapeCSV).join(',');
+        } catch (e) {
+          console.error(`[Export] Ошибка при обработке заявки ${o.number}:`, e);
+          return '';
+        }
+      });
+
       const csv = [header.join(','), ...rows].join('\n');
       const blob = new Blob(['\uFEFF' + csv], {type: 'text/csv;charset=utf-8;'});
       const url = URL.createObjectURL(blob);
@@ -383,7 +400,7 @@
       ? '<div style="padding:16px;text-align:center;color:#888;">Нет заявок за выбранный месяц</div>'
       : `<table>
           <thead><tr>
-            <th>Номер</th><th>ИНЦ/ЗНО</th><th>Объект</th><th>Дата заявки</th><th>Дата закрытия</th><th>Скорость (часы)</th><th>Скорость (мин)</th><th>Текст закрытия</th><th>Автор</th><th>Текст заявки</th>
+            <th>Номер</th><th>ИНЦ/ЗНО</th><th>Объект</th><th>Дата заявки</th><th>Дата закрытия</th><th>Скорость (часы)</th><th>Скорость (мин)</th><th>Текст закрытия</th><th>Автор</th>
           </tr></thead>
           <tbody>
             ${filtered.map(o => {
@@ -397,9 +414,8 @@
                 <td>${o.closeDate ? formatDateTime(o.closeDate) : '—'}</td>
                 <td>${calcSpeedHours(o) !== null ? calcSpeedHours(o) : '—'}</td>
                 <td>${calcSpeedMinutes(o) !== null ? calcSpeedMinutes(o) : '—'}</td>
-                <td class="close-text" title="${escapeHtml(o.closeText)}">${escapeHtml(o.closeText.substring(0, 80)) || '—'}</td>
+                <td class="close-text" title="${escapeHtml(o.closeText)}">${escapeHtml(safeStr(o.closeText).substring(0, 80)) || '—'}</td>
                 <td>${escapeHtml(o.closeAuthor) || '—'}</td>
-                <td class="order-text" title="${escapeHtml(o.text)}">${escapeHtml(o.text.substring(0, 80)) || '—'}</td>
               </tr>`;
             }).join('')}
           </tbody>
@@ -409,8 +425,7 @@
   }
 
   function escapeHtml(text) {
-    if (text === null || text === undefined) return '';
-    const str = String(text);
+    const str = safeStr(text);
     const div = document.createElement('div');
     div.appendChild(document.createTextNode(str));
     return div.innerHTML;
