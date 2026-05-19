@@ -143,6 +143,7 @@
       rootTimestamp: timestamp,
       inc: '',
       object: '',
+      text: text,            // исходный текст заявки
       rootDate: msg.date,
       deadline: null,
       closeDate: null,
@@ -230,7 +231,7 @@
     panel.innerHTML = `
       <style>
         #yamb-orders-panel {
-          position: fixed; top: 0; right: 0; width: 700px; height: 100vh;
+          position: fixed; top: 0; right: 0; width: 780px; height: 100vh;
           background: #fff; box-shadow: -2px 0 10px rgba(0,0,0,0.2);
           z-index: 999999; display: none; flex-direction: column;
           font-family: 'YS Text', sans-serif; font-size: 13px;
@@ -251,7 +252,8 @@
         th { background: #fafafa; font-weight: 500; position: sticky; top: 0; }
         .hk { font-weight: 700; white-space: nowrap; }
         .overdue { color: #e53935; }
-        .close-text { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: help; }
+        .slow-row { background-color: #fff3e0; }  /* лёгкий оранжевый для >8 часов */
+        .close-text, .order-text { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: help; }
         .month-nav { display: flex; align-items: center; gap: 8px; user-select: none; }
         .month-nav span { min-width: 100px; text-align: center; font-weight: 500; }
       </style>
@@ -307,11 +309,25 @@
     return `${dd}.${mm}.${yyyy} ${hh}:${min}`;
   }
 
-  function calcSpeed(order) {
-    if (!order.closeDate || !order.rootDate) return '';
+  function calcSpeedHours(order) {
+    if (!order.closeDate || !order.rootDate) return null;
     const diffMs = order.closeDate - order.rootDate;
-    if (isNaN(diffMs)) return '';
+    if (isNaN(diffMs)) return null;
+    const hours = diffMs / 3600000;
+    return hours.toFixed(2);
+  }
+
+  function calcSpeedMinutes(order) {
+    if (!order.closeDate || !order.rootDate) return null;
+    const diffMs = order.closeDate - order.rootDate;
+    if (isNaN(diffMs)) return null;
     return Math.round(diffMs / 60000);
+  }
+
+  function isSlow(order) {
+    if (!order.closeDate || !order.rootDate) return false;
+    const hours = (order.closeDate - order.rootDate) / 3600000;
+    return hours > 8;
   }
 
   function escapeCSV(text) {
@@ -328,16 +344,18 @@
       );
       console.log('[Export] Найдено заявок:', filtered.length);
       filtered.sort((a, b) => a.rootDate - b.rootDate);
-      const header = ['Номер', 'ИНЦ/ЗНО', 'Объект', 'Дата заявки', 'Дата закрытия', 'Скорость (мин)', 'Текст закрытия', 'Автор'];
+      const header = ['Номер', 'ИНЦ/ЗНО', 'Объект', 'Дата заявки', 'Дата закрытия', 'Скорость (часы)', 'Скорость (мин)', 'Текст закрытия', 'Автор', 'Текст заявки'];
       const rows = filtered.map(o => [
         o.number,
         o.inc,
         o.object,
         formatDateTime(o.rootDate),
         o.closeDate ? formatDateTime(o.closeDate) : '',
-        calcSpeed(o),
+        calcSpeedHours(o) || '',
+        calcSpeedMinutes(o) || '',
         o.closeText,
-        o.closeAuthor
+        o.closeAuthor,
+        o.text
       ].map(escapeCSV).join(','));
       const csv = [header.join(','), ...rows].join('\n');
       const blob = new Blob(['\uFEFF' + csv], {type: 'text/csv;charset=utf-8;'});
@@ -365,20 +383,23 @@
       ? '<div style="padding:16px;text-align:center;color:#888;">Нет заявок за выбранный месяц</div>'
       : `<table>
           <thead><tr>
-            <th>Номер</th><th>ИНЦ/ЗНО</th><th>Объект</th><th>Дата заявки</th><th>Дата закрытия</th><th>Скорость (мин)</th><th>Текст закрытия</th><th>Автор</th>
+            <th>Номер</th><th>ИНЦ/ЗНО</th><th>Объект</th><th>Дата заявки</th><th>Дата закрытия</th><th>Скорость (часы)</th><th>Скорость (мин)</th><th>Текст закрытия</th><th>Автор</th><th>Текст заявки</th>
           </tr></thead>
           <tbody>
             ${filtered.map(o => {
               const overdue = o.deadline && o.deadline < new Date() && !o.closeDate;
-              return `<tr>
+              const slowClass = isSlow(o) ? 'slow-row' : '';
+              return `<tr class="${slowClass}">
                 <td class="hk">${o.number}</td>
                 <td>${o.inc}</td>
                 <td>${o.object}</td>
                 <td>${formatDateTime(o.rootDate)}</td>
                 <td>${o.closeDate ? formatDateTime(o.closeDate) : '—'}</td>
-                <td>${o.closeDate ? calcSpeed(o) : '—'}</td>
+                <td>${calcSpeedHours(o) !== null ? calcSpeedHours(o) : '—'}</td>
+                <td>${calcSpeedMinutes(o) !== null ? calcSpeedMinutes(o) : '—'}</td>
                 <td class="close-text" title="${escapeHtml(o.closeText)}">${escapeHtml(o.closeText.substring(0, 80)) || '—'}</td>
                 <td>${escapeHtml(o.closeAuthor) || '—'}</td>
+                <td class="order-text" title="${escapeHtml(o.text)}">${escapeHtml(o.text.substring(0, 80)) || '—'}</td>
               </tr>`;
             }).join('')}
           </tbody>
