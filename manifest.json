@@ -1,0 +1,23 @@
+{
+  "manifest_version": 2,
+  "name": "Яндекс Мессенджер — Заявки",
+  "version": "1.0",
+  "description": "Отображает таблицу заявок из чата Яндех Мессенджера",
+  "permissions": [
+    "https://messenger.360.yandex.ru/*"
+  ],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://messenger.360.yandex.ru/*"],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "browser_action": {
+    "default_title": "Заявки",
+    "default_icon": "icon.svg"
+  }
+}
