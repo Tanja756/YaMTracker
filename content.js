@@ -275,7 +275,10 @@
           <button id="yamb-close-panel">✕</button>
         </div>
       </div>
-      <div id="yamb-orders-table-wrapper"></div>
+      <div id="yamb-orders-table-wrapper" style="overflow-y: scroll; max-height: 90vh;">
++++++++
+REPLACE
+
     `;
     document.body.appendChild(panel);
 
